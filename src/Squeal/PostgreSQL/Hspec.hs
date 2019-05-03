@@ -10,7 +10,6 @@ The libary also provides a few other functions for more fine grained control ove
 -}
 {-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE KindSignatures   #-}
 {-# LANGUAGE MonoLocalBinds   #-}
 {-# LANGUAGE RankNTypes       #-}
 {-# LANGUAGE RecordWildCards  #-}
@@ -21,13 +20,11 @@ where
 
 import           Control.Exception
 import           Control.Monad
-import           Control.Monad.Base          (liftBase)
-import           Control.Monad.Trans.Control (MonadBaseControl)
-import qualified Data.ByteString.Char8       as BSC
-import qualified Database.Postgres.Temp      as Temp
-import           Generics.SOP                (K)
+import           Control.Monad.Base     (liftBase)
+import qualified Data.ByteString.Char8  as BSC
+import qualified Database.Postgres.Temp as Temp
+import           Generics.SOP           (K)
 import           Squeal.PostgreSQL
-import           Squeal.PostgreSQL.Migration
 import           Squeal.PostgreSQL.Pool
 import           Test.Hspec
 
@@ -38,17 +35,13 @@ data TestDB a = TestDB
   -- ^ Pool of 50 connections to the temporary @postgres@
   }
 
-type Migrations schema m a = (MonadBaseControl IO m) =>
-  PQ (("schema_migrations" ::: Table MigrationsTable) ': '[])
-     (("schema_migrations" ::: Table MigrationsTable) ': schema) m a
-
 type Fixtures schema = (Pool (K Connection schema) -> IO ())
 type Actions schema a = PoolPQ schema IO a
-type SquealContext (schema :: SchemaType) = TestDB (K Connection schema)
+type SquealContext schema = TestDB (K Connection schema)
 
 -- | Start a temporary @postgres@ process and create a pool of connections to it
 setupDB
-  :: Migrations schema IO a
+  :: AlignedList (Migration (Terminally PQ IO)) schema0 schema
   -> Fixtures schema
   -> IO (SquealContext schema)
 setupDB migration fixtures = do
@@ -63,7 +56,7 @@ setupDB migration fixtures = do
      singleStripe
      keepConnectionForOneHour
      poolSizeOfFifty
-  withConnection connectionString migration
+  withConnection connectionString (migrateUp migration)
   fixtures pool
   pure TestDB {..}
 
@@ -105,7 +98,7 @@ itDB msg action = it msg $ void . withDB action
 --
 -- hook for stopping a db.
 describeDB
-  :: Migrations schema IO a
+  :: AlignedList (Migration (Terminally PQ IO)) schema0 schema
   -> Fixtures schema
   -> String
   -> SpecWith (SquealContext schema)
