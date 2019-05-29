@@ -59,7 +59,7 @@ createTempDB = do
 
 -- | Start a temporary @postgres@ process and create a pool of connections to it
 setupDB
-  :: AlignedList (Migration (Terminally PQ IO)) schema0 schema
+  :: Migratory p => AlignedList (Migration p) schema0 schema
   -> Fixtures schema
   -> IO (SquealContext schema)
 setupDB migration fixtures = do
@@ -79,7 +79,7 @@ setupDB migration fixtures = do
 
 -- | Drop all the connections and shutdown the @postgres@ process
 teardownDB
-  :: AlignedList (Migration (Terminally PQ IO)) schema0 schema
+  :: Migratory p => AlignedList (Migration p) schema0 schema
   -> TestDB a
   -> IO ()
 teardownDB migration TestDB {..} = do
@@ -119,7 +119,7 @@ itDB msg action = it msg $ void . withDB action
 --
 -- hook for stopping a db.
 describeDB
-  :: AlignedList (Migration (Terminally PQ IO)) schema0 schema
+  :: Migratory p => AlignedList (Migration p) schema0 schema
   -> Fixtures schema
   -> String
   -> SpecWith (SquealContext schema)
