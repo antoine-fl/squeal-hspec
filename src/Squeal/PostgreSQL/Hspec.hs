@@ -39,9 +39,10 @@ data TestDB a = TestDB
   , connectionString :: ByteString
   }
 
-type Fixtures schema = (Pool (K Connection schema) -> IO ())
+type Fixtures schema a = (Pool (K Connection schema) -> IO a)
 type Actions schema a = PoolPQ schema IO a
 type SquealContext schema = TestDB (K Connection schema)
+type FixtureContext schema fix = (SquealContext schema, fix)
 
 testDBEnv :: String
 testDBEnv = "TEST_DB_CONNECTION_STRING"
@@ -60,8 +61,8 @@ createTempDB = do
 -- | Start a temporary @postgres@ process and create a pool of connections to it
 setupDB
   :: Migratory p => AlignedList (Migration p) schema0 schema
-  -> Fixtures schema
-  -> IO (SquealContext schema)
+  -> Fixtures schema fix
+  -> IO (FixtureContext schema fix)
 setupDB migration fixtures = do
   (connectionString, tempDB) <- getOrCreateConnectionString
   BSC.putStrLn connectionString
@@ -74,8 +75,8 @@ setupDB migration fixtures = do
      keepConnectionForOneHour
      poolSizeOfFifty
   withConnection connectionString (migrateUp migration)
-  fixtures pool
-  pure TestDB {..}
+  res <- fixtures pool
+  pure (TestDB {..}, res)
 
 -- | Drop all the connections and shutdown the @postgres@ process
 teardownDB
@@ -100,10 +101,27 @@ withDB action testDB =
 runDB :: TestDB (K Connection schema) -> Actions schema a -> IO a
 runDB = flip withDB
 
+withFixture :: (fix -> Actions schema a) -> FixtureContext schema fix -> IO a
+withFixture action (db, fix) =
+  runPoolPQ (transactionally_ $ action fix) (pool db)
+
+withoutFixture :: Actions schema a -> FixtureContext schema fix -> IO a
+withoutFixture action (db, _) =
+  runPoolPQ (transactionally_ action) (pool db)
+
 -- | Helper for writing tests. Wrapper around 'it' that uses the passed
 --   in 'TestDB' to run a db transaction automatically for the test.
-itDB :: String -> Actions schema a -> SpecWith (TestDB (K Connection schema))
-itDB msg action = it msg $ void . withDB action
+itDB :: String -> Actions schema a -> SpecWith (FixtureContext schema ())
+itDB msg action = it msg $ void . withoutFixture action
+
+-- | Helper for writing tests. Wrapper around 'it' that uses the passed
+-- in 'TestDB' to run a db transaction automatically for the test,
+-- plus the result of the fixtures.
+itDBF :: String -> (fix -> Actions schema a) -> SpecWith (FixtureContext schema fix)
+itDBF msg action = it msg $ void . withFixture action
+
+itDBF_ :: String -> Actions schema a -> SpecWith (FixtureContext schema fix)
+itDBF_ msg action = it msg $ void . withoutFixture action
 
 -- | Wraps 'describe' with a
 --
@@ -120,9 +138,20 @@ itDB msg action = it msg $ void . withDB action
 -- hook for stopping a db.
 describeDB
   :: Migratory p => AlignedList (Migration p) schema0 schema
-  -> Fixtures schema
+  -> Fixtures schema ()
   -> String
-  -> SpecWith (SquealContext schema)
+  -> SpecWith (FixtureContext schema ())
   -> Spec
 describeDB migrate fixture str =
-  beforeAll (setupDB migrate fixture) . afterAll (teardownDB migrate) . describe str
+  beforeAll (setupDB migrate fixture) . afterAll (teardownDB migrate . fst) . describe str
+
+-- | Like `decribeDB`, but allow fixtures to pass
+-- | a result to all specs
+describeFixtures
+  :: Migratory p => AlignedList (Migration p) schema0 schema
+  -> Fixtures schema fix
+  -> String
+  -> SpecWith (FixtureContext schema fix)
+  -> Spec
+describeFixtures migrate fixture str =
+  beforeAll (setupDB migrate fixture) . afterAll (teardownDB migrate . fst) . describe str

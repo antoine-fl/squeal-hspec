@@ -40,7 +40,7 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - squeal-0.5.0.0
+  - squeal-postgresql-0.5.0.0
   - unliftio-pool-0.2.1.0@sha256:4de658feb1b10051c5af024c20cd7baa369c777716c54a7b3e2888a73286aecf
   - records-sop-0.1.0.2
   - tmp-postgres-0.1.1.0                                                                                                
