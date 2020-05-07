@@ -27,22 +27,21 @@ import qualified Data.ByteString.Char8  as BSC
 import qualified Database.Postgres.Temp as Temp
 import           Generics.SOP           (K)
 import           Squeal.PostgreSQL
-import           Squeal.PostgreSQL.Pool
 import           System.Environment     (lookupEnv)
 import           Test.Hspec
 
 data TestDB a = TestDB
   { tempDB           :: Maybe Temp.DB
   -- ^ Handle for temporary @postgres@ process
-  , pool             :: Pool a
+  , pool             :: Pool (K Connection a)
   -- ^ Pool of 50 connections to the temporary @postgres@
   , connectionString :: ByteString
   }
 
-type Fixtures schema a = (Pool (K Connection schema) -> IO a)
-type Actions schema a = PoolPQ schema IO a
-type SquealContext schema = TestDB (K Connection schema)
-type FixtureContext schema fix = (SquealContext schema, fix)
+type Fixtures db a = (Pool (K Connection db) -> IO a)
+type Actions db a = PQ db db IO a
+type FixtureContext db fix = (TestDB db, fix)
+type Migrations def from to = Path (Migration def) from to
 
 testDBEnv :: String
 testDBEnv = "TEST_DB_CONNECTION_STRING"
@@ -60,7 +59,8 @@ createTempDB = do
 
 -- | Start a temporary @postgres@ process and create a pool of connections to it
 setupDB
-  :: Migratory p => AlignedList (Migration p) schema0 schema
+  :: Migratory def (IsoQ (Indexed PQ IO ()))
+  => Migrations def schema0 schema
   -> Fixtures schema fix
   -> IO (FixtureContext schema fix)
 setupDB migration fixtures = do
@@ -80,47 +80,48 @@ setupDB migration fixtures = do
 
 -- | Drop all the connections and shutdown the @postgres@ process
 teardownDB
-  :: Migratory p => AlignedList (Migration p) schema0 schema
+  :: Migratory def (IsoQ (Indexed PQ IO ()))
+  => Migrations def schema0 schema
   -> TestDB a
   -> IO ()
 teardownDB migration TestDB {..} = do
   withConnection connectionString (migrateDown migration)
-  destroyAllResources pool
+  destroyConnectionPool pool
   maybe (pure ()) (void . Temp.stop) tempDB
 
 -- | Run an 'IO' action with a connection from the pool
-withPool :: TestDB (K Connection schema) -> Actions schema a -> IO a
-withPool testDB = liftBase . flip runPoolPQ (pool testDB)
+withPool :: TestDB db -> Actions db a -> IO a
+withPool testDB = liftBase . usingConnectionPool (pool testDB)
 
 -- | Run an 'DB' transaction, using 'transactionally_'
-withDB :: Actions schema a -> TestDB (K Connection schema) -> IO a
+withDB :: Actions db a -> TestDB db -> IO a
 withDB action testDB =
-  runPoolPQ (transactionally_ action) (pool testDB)
+  usingConnectionPool (pool testDB) (transactionally_ action)
 
 -- | Flipped version of 'withDB'
-runDB :: TestDB (K Connection schema) -> Actions schema a -> IO a
+runDB :: TestDB db -> Actions db a -> IO a
 runDB = flip withDB
 
-withFixture :: (fix -> Actions schema a) -> FixtureContext schema fix -> IO a
+withFixture :: (fix -> Actions db a) -> FixtureContext db fix -> IO a
 withFixture action (db, fix) =
-  runPoolPQ (transactionally_ $ action fix) (pool db)
+  usingConnectionPool (pool db) (transactionally_ $ action fix)
 
-withoutFixture :: Actions schema a -> FixtureContext schema fix -> IO a
+withoutFixture :: Actions db a -> FixtureContext db fix -> IO a
 withoutFixture action (db, _) =
-  runPoolPQ (transactionally_ action) (pool db)
+  usingConnectionPool (pool db) (transactionally_ action)
 
 -- | Helper for writing tests. Wrapper around 'it' that uses the passed
 --   in 'TestDB' to run a db transaction automatically for the test.
-itDB :: String -> Actions schema a -> SpecWith (FixtureContext schema ())
+itDB :: String -> Actions db a -> SpecWith (FixtureContext db ())
 itDB msg action = it msg $ void . withoutFixture action
 
 -- | Helper for writing tests. Wrapper around 'it' that uses the passed
 -- in 'TestDB' to run a db transaction automatically for the test,
 -- plus the result of the fixtures.
-itDBF :: String -> (fix -> Actions schema a) -> SpecWith (FixtureContext schema fix)
+itDBF :: String -> (fix -> Actions db a) -> SpecWith (FixtureContext db fix)
 itDBF msg action = it msg $ void . withFixture action
 
-itDBF_ :: String -> Actions schema a -> SpecWith (FixtureContext schema fix)
+itDBF_ :: String -> Actions db a -> SpecWith (FixtureContext db fix)
 itDBF_ msg action = it msg $ void . withoutFixture action
 
 -- | Wraps 'describe' with a
@@ -137,10 +138,11 @@ itDBF_ msg action = it msg $ void . withoutFixture action
 --
 -- hook for stopping a db.
 describeDB
-  :: Migratory p => AlignedList (Migration p) schema0 schema
-  -> Fixtures schema ()
+  :: Migratory def (IsoQ (Indexed PQ IO ()))
+  => Migrations def db0 db
+  -> Fixtures db ()
   -> String
-  -> SpecWith (FixtureContext schema ())
+  -> SpecWith (FixtureContext db ())
   -> Spec
 describeDB migrate fixture str =
   beforeAll (setupDB migrate fixture) . afterAll (teardownDB migrate . fst) . describe str
@@ -148,10 +150,11 @@ describeDB migrate fixture str =
 -- | Like `decribeDB`, but allow fixtures to pass
 -- | a result to all specs
 describeFixtures
-  :: Migratory p => AlignedList (Migration p) schema0 schema
-  -> Fixtures schema fix
+  :: Migratory def (IsoQ (Indexed PQ IO ()))
+  => Migrations def db0 db
+  -> Fixtures db fix
   -> String
-  -> SpecWith (FixtureContext schema fix)
+  -> SpecWith (FixtureContext db fix)
   -> Spec
 describeFixtures migrate fixture str =
   beforeAll (setupDB migrate fixture) . afterAll (teardownDB migrate . fst) . describe str
