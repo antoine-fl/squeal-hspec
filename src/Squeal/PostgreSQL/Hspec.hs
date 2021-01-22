@@ -24,8 +24,7 @@ import           Control.Monad
 import           Control.Monad.Base     (liftBase)
 import           Data.ByteString        (ByteString)
 import qualified Data.ByteString.Char8  as BSC
-import qualified Database.Postgres.Temp as Temp
-import           Generics.SOP           (K)
+import           Database.Postgres.Temp as Temp
 import           Squeal.PostgreSQL
 import           System.Environment     (lookupEnv)
 import           Test.Hspec
@@ -53,8 +52,8 @@ getOrCreateConnectionString = do
 
 createTempDB :: IO (ByteString, Maybe Temp.DB)
 createTempDB = do
-  tempDB <- either throwIO return =<< Temp.startAndLogToTmp []
-  let connectionString = BSC.pack (Temp.connectionString tempDB)
+  tempDB <- either throwIO return =<< Temp.start
+  let connectionString = Temp.toConnectionString tempDB
   pure (connectionString, Just tempDB)
 
 -- | Start a temporary @postgres@ process and create a pool of connections to it
