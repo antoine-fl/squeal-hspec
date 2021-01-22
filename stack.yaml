@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-13.20
+resolver: lts-16.31
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -41,13 +41,9 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
   - git: https://github.com/morphismtech/squeal
-    commit: 9b5c1f78097f531a66da8cca267e2ad6c1d227e6
+    commit: 7557c2ddd32430ed82937a7864e5879b1ac77513
     subdirs:
       - squeal-postgresql
-  - unliftio-pool-0.2.1.0@sha256:4de658feb1b10051c5af024c20cd7baa369c777716c54a7b3e2888a73286aecf
-  - free-categories-0.2.0.0
-  - records-sop-0.1.0.2
-  - tmp-postgres-0.1.1.0                                                                                                
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
