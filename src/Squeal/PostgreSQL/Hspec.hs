@@ -8,14 +8,12 @@ Tests can be written with 'itDB' which is wrapper around 'it' that uses the pass
 
 The libary also provides a few other functions for more fine grained control over running transactions in tests.
 -}
-{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MonoLocalBinds   #-}
 {-# LANGUAGE RankNTypes       #-}
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TupleSections    #-}
 {-# LANGUAGE TypeInType       #-}
-{-# LANGUAGE TypeOperators    #-}
 module Squeal.PostgreSQL.Hspec
 where
 
