@@ -19,12 +19,23 @@ where
 
 import           Control.Exception
 import           Control.Monad
-import           Control.Monad.Base     (liftBase)
-import           Data.ByteString        (ByteString)
-import qualified Data.ByteString.Char8  as BSC
-import           Database.Postgres.Temp as Temp
-import           Squeal.PostgreSQL
-import           System.Environment     (lookupEnv)
+import           Control.Monad.Base                           (liftBase)
+import           Data.ByteString                              (ByteString)
+import qualified Data.ByteString.Char8                        as BSC
+import           Database.Postgres.Temp                       as Temp
+import           Squeal.PostgreSQL                            (Connection,
+                                                               Indexed, IsoQ, K,
+                                                               Migration,
+                                                               Migratory, PQ,
+                                                               Path, Pool,
+                                                               createConnectionPool,
+                                                               destroyConnectionPool,
+                                                               migrateDown,
+                                                               migrateUp,
+                                                               usingConnectionPool,
+                                                               withConnection)
+import           Squeal.PostgreSQL.Session.Transaction.Unsafe (transactionally_)
+import           System.Environment                           (lookupEnv)
 import           Test.Hspec
 
 data TestDB a = TestDB
